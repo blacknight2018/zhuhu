@@ -17,7 +17,9 @@ func GetUserAgent() string {
 func GetSingleMax() int {
 	return 20
 }
-
+func GetSingleReplyMax() int {
+	return 20
+}
 func GetDSN() string {
 	return `root:root@tcp(localhost:3306)/zhihu?charset=utf8&parseTime=True&loc=Local&timeout=10s&readTimeout=30s&writeTimeout=60s`
 }
@@ -35,5 +37,13 @@ func GetFailedRetry() int {
 }
 
 func GetMaxThreadNums() int {
-	return 1
+	return 300
+}
+
+func GetHttpServerAddressPort() string {
+	return ":8888"
+}
+
+func GetCheckInterval() int {
+	return 100
 }

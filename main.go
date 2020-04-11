@@ -1,6 +1,7 @@
 package main
 
 import (
+	"demo/httpserver"
 	"demo/spide"
 )
 
@@ -12,10 +13,16 @@ func main() {
 	//spide.GetImageCode()
 	//spide.PostVerify(spide.GetImageCode())
 	//spide.FreshDayHot()
-	//fmt.Println(spide.GetSinglePage("https://www.zhihu.com/question/308829198"))
+	//fmt.Println(spide.GetSinglePage("https://www.zhihu.com/question/384802353"))
 	//status:=spide.CheckStatus()
 	//fmt.Println(status)
-
-	spide.FreshRandom()
+	//spide.AddNewUser("zhi-li-gong-jue");
+	go spide.FreshRandom()
+	//orm.SelectUserSizeByConditional("locations like '%北京%'")
+	//return
+	httpserver.StartWebServer()
+	//orm.GetLocationsContain("北京")
+	//spide.GetSinglePage();
+	//spide.FreshRandom()
 	//spide.CheckStatus()
 }

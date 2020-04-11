@@ -23,6 +23,48 @@ const (
 	OTHER  = iota
 )
 
+func GetReplyUsers(answerID string) []string {
+	//https://www.zhihu.com/api/v4/answers/1139873632/root_comments?order=normal&limit=20&offset=0&status=open
+	var offset int = 0
+	var limit int = configure.GetSingleReplyMax()
+	var rects []string
+	for {
+		url := "https://www.zhihu.com/api/v4/answers/"
+		url += answerID
+		url += "/root_comments?order=normal&limit=" + strconv.Itoa(limit) + "&offset=" + strconv.Itoa(offset) + "&status=open"
+		req, err := http.NewRequest("GET", url, nil)
+		if err != nil {
+			panic(exception.ZhiError{
+				Code:     exception.HttpGetFail,
+				FuncName: "GetReplyUsers",
+			})
+		}
+		resp, err := (&http.Client{}).Do(req)
+		if err != nil {
+			panic(exception.ZhiError{
+				Code:     exception.RespBodyNil,
+				FuncName: "GetReplyUsers",
+			})
+		}
+		bytes, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			panic(exception.ZhiError{
+				Code:     exception.RespBodyNil,
+				FuncName: "GetReplyUsers",
+			})
+		}
+		var commonCounts int64 = gjson.Get(string(bytes), "data.#").Int()
+		urlTokens := gjson.Get(string(bytes), "data.#.author.member.url_token").Array()
+		for k := 0; k < len(urlTokens); k++ {
+			rects = append(rects, urlTokens[k].String())
+		}
+		offset += configure.GetSingleReplyMax()
+		if commonCounts < int64(configure.GetSingleReplyMax()) {
+			break
+		}
+	}
+	return rects
+}
 func GetSinglePage(url string) []string {
 	var ret []string
 	url = strings.Replace(url, "https://www.zhihu.com/question/", "https://www.zhihu.com/api/v4/questions/", 1)
@@ -43,15 +85,21 @@ func GetSinglePage(url string) []string {
 		if err == nil {
 			data, err := ioutil.ReadAll(resp.Body)
 			if err == nil {
-				var nameJson = gjson.Get(string(data), "data.#.author.url_token")
-				nameJson.ForEach(func(key, value gjson.Result) bool {
+				var authorNameJson = gjson.Get(string(data), "data.#.author.url_token")
+				var articleID = gjson.Get(string(data), "data.#.id").Array()
+				for k := 0; k < len(articleID); k++ {
+					reply := GetReplyUsers(articleID[k].String())
+					ret = append(ret, reply...)
+				}
+
+				authorNameJson.ForEach(func(key, value gjson.Result) bool {
 					if value.String() != "" {
 						ret = append(ret, value.String())
 					}
 					return true
 				})
-				fmt.Println(nameJson)
-				var eleNums int = len(nameJson.Array())
+				fmt.Println(authorNameJson)
+				var eleNums int = len(authorNameJson.Array())
 				if eleNums != configure.GetSingleMax() {
 					break
 				}
@@ -121,6 +169,7 @@ func FreshDayHot() {
 }
 
 func GetUserInformation(url string) {
+	//
 	req, err := http.NewRequest("GET", url, nil)
 	if err == nil {
 		req.Header.Set("user-agent", configure.GetUserAgent())
@@ -136,6 +185,7 @@ func GetUserInformation(url string) {
 			defer resp.Body.Close()
 			doc, err := goquery.NewDocumentFromReader(resp.Body)
 			if err == nil {
+
 				sec := doc.Find("body").Find("#js-initialData")
 				location := gjson.Get(sec.Text(), "initialState.entities.users.*.locations.#.name").String()
 				school := gjson.Get(sec.Text(), "initialState.entities.users.*.educations.#.school.name").String()
@@ -144,13 +194,14 @@ func GetUserInformation(url string) {
 				followingCount := gjson.Get(sec.Text(), "initialState.entities.users.*.followingCount").Int()
 				workIn := gjson.Get(sec.Text(), "initialState.entities.users.*.business.name").String()
 				userToken := gjson.Get(sec.Text(), "initialState.entities.users.*.urlToken").String()
+
 				p1 := orm.People{
 					UserToken:      userToken,
 					Locations:      location,
 					School:         school,
 					FollowerCount:  int(followerCount),
 					FollowingCount: int(followingCount),
-					Workin:         workIn,
+					WorkIn:         workIn,
 					Major:          major,
 				}
 				orm.InsertPeople(p1)
@@ -215,25 +266,29 @@ func FreshRandom() {
 		for i := 0; i < configure.GetMaxThreadNums(); i++ {
 			wg.Add(1)
 			//
-			go func() {
+			go func(wg_f *sync.WaitGroup, i int) {
 				//处理协程的异常
 				defer func() {
-					wg.Done()
+					wg_f.Done()
+					fmt.Println("done:" + strconv.Itoa(i))
 					if err := recover(); err != nil {
-						fmt.Println(err)
+						exception.ErrorNotify(err.(exception.ZhiError))
 					}
 				}()
 
 				r := getRandomQuestion()
 				for _, v := range r {
 					username := GetSinglePage(v)
-					for _, r := range username {
+					for i, r := range username {
 						if len(r) != 0 {
 							AddNewUser(r)
+							if i%configure.GetCheckInterval() == 0 {
+								CodeVerifyPanic()
+							}
 						}
 					}
 				}
-			}()
+			}(&wg, i)
 		}
 		wg.Wait()
 		logger.DBLog(logrus.Fields{}, logrus.InfoLevel, "50 goroutime finished")
@@ -242,7 +297,8 @@ func FreshRandom() {
 			defer func() {
 				//处理会抛出的异常
 				if err := recover(); err != nil {
-					fmt.Println(err)
+
+					exception.ErrorNotify(err.(exception.ZhiError))
 				}
 			}()
 
@@ -275,7 +331,28 @@ func FreshRandom() {
 		time.Sleep(100 * time.Second)
 	}
 }
+func CodeVerifyPanic() {
+	//
+	if status := CheckStatus(); status == VERIFY {
+		panic(exception.ZhiError{
+			Code:     exception.CodeVerifyThreadDestroy,
+			FuncName: "GetUserInformation",
+		})
+	}
+}
 
+func GetStatus(bytes []byte) int {
+	str := string(bytes)
+	pos := strings.Index(str, "安全验证")
+	if pos != -1 {
+		return VERIFY
+	}
+	pos = strings.Index(str, "我的收藏")
+	if pos != -1 {
+		return NORMAL
+	}
+	return OTHER
+}
 func CheckStatus() int {
 	req, err := http.NewRequest("GET", "https://www.zhihu.com", nil)
 	req.Header.Set("cookie", configure.GetCookie())
@@ -285,16 +362,7 @@ func CheckStatus() int {
 			defer resp.Body.Close()
 			bytes, err := ioutil.ReadAll(resp.Body)
 			if err == nil {
-				str := string(bytes)
-				pos := strings.Index(str, "安全验证")
-				if pos != -1 {
-					return VERIFY
-				}
-				pos = strings.Index(str, "我的收藏")
-				if pos != -1 {
-					return NORMAL
-				}
-				return OTHER
+				return GetStatus(bytes)
 			} else {
 				panic(exception.ZhiError{
 					Code:     exception.ReadBodyError,

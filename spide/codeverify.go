@@ -1,6 +1,7 @@
 package spide
 
 import (
+	"bytes"
 	"demo/configure"
 	"demo/exception"
 	"demo/logger"
@@ -8,14 +9,14 @@ import (
 	"encoding/json"
 	"github.com/sirupsen/logrus"
 	"github.com/tidwall/gjson"
+	"image/gif"
+	"image/jpeg"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"net/url"
-	"os"
-	"os/exec"
 	"strconv"
 	"strings"
-	"time"
 )
 
 func GetImageCode() string {
@@ -83,21 +84,28 @@ func GetBaiDuAccessToken() string {
 	}
 	return ret
 }
+
 func convertToJpeg(base64Image string) string {
 	var ret string
-	ddd, _ := base64.StdEncoding.DecodeString(base64Image)
-	ioutil.WriteFile("./in", ddd, 0666)
-	cmd := exec.Command("lissajous.exe")
-	cmd.Output()
-	time.Sleep(time.Second * 1)
-	bytes, _ := ioutil.ReadFile("./jpeg")
-	ret = base64.StdEncoding.EncodeToString(bytes)
-	//os.Remove("./in")
-	os.Remove("./jpeg")
-	return ret
+	debases, err := base64.StdEncoding.DecodeString(base64Image)
+	if err == nil {
+		var bwr io.Reader
+		bwr = strings.NewReader(string(debases))
+		img, err := gif.Decode(bwr)
+		if err == nil {
+			var bsb bytes.Buffer
+			jpeg.Encode(&bsb, img, nil)
+			ret = base64.StdEncoding.EncodeToString(bsb.Bytes())
+			return ret
+		}
+	}
+	panic(exception.ZhiError{
+		Code:     exception.ImageTransError,
+		FuncName: "convertToJpeg",
+	})
 }
 func PutCode(code string) {
-	apiurl := "https://www.zhihu.com/api/v4/anticrawl/captcha_appeal"
+	apiUrl := "https://www.zhihu.com/api/v4/anticrawl/captcha_appeal"
 	respStruct := struct {
 		Captcha string `json:"captcha"`
 	}{Captcha: code}
@@ -106,7 +114,7 @@ func PutCode(code string) {
 		return
 	}
 	respJson := string(bytes)
-	req, err := http.NewRequest("POST", apiurl, strings.NewReader(respJson))
+	req, err := http.NewRequest("POST", apiUrl, strings.NewReader(respJson))
 	req.Header.Set("cookie", configure.GetCookie())
 	req.Header.Set("content-type", "application/json")
 	req.Header.Set("Accept-Encoding", "gzip, deflate, br")

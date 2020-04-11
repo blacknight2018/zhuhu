@@ -11,7 +11,7 @@ type People struct {
 	School         string `gorm:"column:school"`
 	FollowerCount  int    `gorm:"column:follower_count"`
 	FollowingCount int    `gorm:"column:following_count"`
-	Workin         string `gorm:"column:workin"`
+	WorkIn         string `gorm:"column:workin"`
 	Major          string `gorm:"column:major"`
 }
 
@@ -29,7 +29,9 @@ func InsertPeople(u People) {
 
 	} else {
 		logger.DBLog(logrus.Fields{}, logrus.InfoLevel, "insert success")
-
 	}
-
+}
+func SelectUserSizeByConditional(conditional string) (RetSet []People) {
+	GetDB().Model(&People{}).Where(conditional).Scan(&RetSet)
+	return
 }
