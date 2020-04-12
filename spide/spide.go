@@ -5,7 +5,6 @@ import (
 	"demo/exception"
 	"demo/logger"
 	"demo/orm"
-	"fmt"
 	"github.com/PuerkitoBio/goquery"
 	"github.com/sirupsen/logrus"
 	"github.com/tidwall/gjson"
@@ -65,6 +64,22 @@ func GetReplyUsers(answerID string) []string {
 	}
 	return rects
 }
+func RemoveRepeatedElement(arr []string) (newArr []string) {
+	newArr = make([]string, 0)
+	for i := 0; i < len(arr); i++ {
+		repeat := false
+		for j := i + 1; j < len(arr); j++ {
+			if arr[i] == arr[j] {
+				repeat = true
+				break
+			}
+		}
+		if !repeat {
+			newArr = append(newArr, arr[i])
+		}
+	}
+	return
+}
 func GetSinglePage(url string) []string {
 	var ret []string
 	url = strings.Replace(url, "https://www.zhihu.com/question/", "https://www.zhihu.com/api/v4/questions/", 1)
@@ -86,11 +101,14 @@ func GetSinglePage(url string) []string {
 			data, err := ioutil.ReadAll(resp.Body)
 			if err == nil {
 				var authorNameJson = gjson.Get(string(data), "data.#.author.url_token")
-				var articleID = gjson.Get(string(data), "data.#.id").Array()
-				for k := 0; k < len(articleID); k++ {
-					reply := GetReplyUsers(articleID[k].String())
-					ret = append(ret, reply...)
-				}
+				/*
+					//爬取问题下的回复者
+					var articleID = gjson.Get(string(data), "data.#.id").Array()
+					for k := 0; k < len(articleID); k++ {
+						reply := GetReplyUsers(articleID[k].String())
+						ret = append(ret, reply...)
+					}
+				*/
 
 				authorNameJson.ForEach(func(key, value gjson.Result) bool {
 					if value.String() != "" {
@@ -98,13 +116,18 @@ func GetSinglePage(url string) []string {
 					}
 					return true
 				})
-				fmt.Println(authorNameJson)
+				//fmt.Println(authorNameJson)
 				var eleNums int = len(authorNameJson.Array())
 				if eleNums != configure.GetSingleMax() {
 					break
 				}
 				pos += configure.GetSingleMax()
 				url = src
+
+				//单个问题爬到一定规模就好了
+				if len(ret) >= configure.GetSinglePageLimits() {
+					break
+				}
 			} else {
 				panic(exception.ZhiError{
 					Code:     exception.ReadBodyError,
@@ -118,6 +141,7 @@ func GetSinglePage(url string) []string {
 			})
 		}
 	}
+	ret = RemoveRepeatedElement(ret)
 	return ret
 }
 
@@ -172,7 +196,7 @@ func GetUserInformation(url string) {
 	//
 	req, err := http.NewRequest("GET", url, nil)
 	if err == nil {
-		req.Header.Set("user-agent", configure.GetUserAgent())
+		req.Header.Set("User-Agent", configure.GetUserAgent())
 		req.Header.Set("Cookie", configure.GetCookie())
 		resp, err := (&http.Client{}).Do(req)
 		if err != nil {
@@ -215,48 +239,66 @@ func GetUserInformation(url string) {
 	}
 }
 
-func getRandomQuestion() []string {
+func GetRandomQuestion() []string {
 	var ret []string
-	var url = "https://www.zhihu.com/"
+	var url = "https://www.zhihu.com"
 	req, err := http.NewRequest("GET", url, nil)
 	if err == nil {
 		req.Header.Set("user-agent", configure.GetUserAgent())
 		req.Header.Set("Cookie", configure.GetCookie())
+		req.Header.Set("referer", "https://www.zhihu.com/")
 		resp, err := (&http.Client{}).Do(req)
 		if err == nil {
 			defer resp.Body.Close()
 			doc, err := goquery.NewDocumentFromReader(resp.Body)
 			if err == nil {
-				sec := doc.Find("body").Find("#js-initialData")
-				as := gjson.Get(sec.Text(), "initialState.entities.answers")
-				as.ForEach(func(key, value gjson.Result) bool {
-					ret = append(ret, value.Get("question.url").String())
-					return true
+				hrefs := doc.Find("*[data-za-detail-view-element_name]")
+				hrefs.Each(func(i int, selection *goquery.Selection) {
+					r, _ := selection.Attr("href")
+					if strings.Index(r, "question") > 0 {
+						ret = append(ret, string(url+r))
+					}
 				})
+				//sec := doc.Find("body").Find("#js-initialData")
+				//as := gjson.Get(sec.Text(), "initialState.topstory.hotList.#.target.link.url")
+				//fmt.Println(gjson.Get(sec.Text(), "initialState.topstory.hotList.#.target.link.url"))
+				//return ret
+				/*as.ForEach(func(key, value gjson.Result) bool {
+					if strings.Index(value.String(),"question")>0{
+						ret = append(ret, value.String())
+					}
+					return true
+				})*/
+
 			} else {
 				panic(exception.ZhiError{
 					Code:     exception.ReadBodyError,
-					FuncName: "getRandomQuestion",
+					FuncName: "GetRandomQuestion",
 				})
 			}
 		} else {
 			panic(exception.ZhiError{
 				Code:     exception.RespBodyNil,
-				FuncName: "getRandomQuestion",
+				FuncName: "GetRandomQuestion",
 			})
 		}
 	} else {
 		panic(exception.ZhiError{
 			Code:     exception.HttpGetFail,
-			FuncName: "getRandomQuestion",
+			FuncName: "GetRandomQuestion",
 		})
 	}
 	//预处理
+
 	for i := 0; i < len(ret); i++ {
 		s := ret[i]
-		pos := strings.LastIndex(s, "/")
-		ret[i] = "https://www.zhihu.com/question/" + s[pos+1:]
+		pos := strings.LastIndex(s, "/answer")
+		ret[i] = s[:pos]
+		//str,_:=url2.QueryUnescape(s)
+		//ret[i] = str
+		//fmt.Println(str)
 	}
+	//ret=RemoveRepeatedElement(ret)
 	return ret
 }
 
@@ -270,13 +312,12 @@ func FreshRandom() {
 				//处理协程的异常
 				defer func() {
 					wg_f.Done()
-					fmt.Println("done:" + strconv.Itoa(i))
 					if err := recover(); err != nil {
 						exception.ErrorNotify(err.(exception.ZhiError))
 					}
 				}()
 
-				r := getRandomQuestion()
+				r := GetRandomQuestion()
 				for _, v := range r {
 					username := GetSinglePage(v)
 					for i, r := range username {
@@ -328,7 +369,7 @@ func FreshRandom() {
 
 		}()
 		logger.DBLog(logrus.Fields{}, logrus.InfoLevel, "Sleep")
-		time.Sleep(100 * time.Second)
+		time.Sleep(5 * time.Second)
 	}
 }
 func CodeVerifyPanic() {

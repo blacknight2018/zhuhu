@@ -23,6 +23,8 @@ func InsertPeople(u People) {
 	if u.UserToken == "" {
 		return
 	}
+	//db:=GetDB().First(&u)
+	//fmt.Println(db)
 	err := GetDB().Create(&u).Error
 	if err != nil {
 		logger.DBLog(logrus.Fields{}, logrus.InfoLevel, "insert error:"+err.Error())

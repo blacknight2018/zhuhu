@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>知乎用户分布</title>
+    <link rel="stylesheet" href="./css/index.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.4.0/Chart.min.js"></script>
+</head>
+<body>
+    <canvas id="paint"></canvas>
+    <script>
+        function refrushDatas(province) {
+            var ret = new Array();
+            //var province = ["北京","天津","上海","重庆","河北","辽宁","吉林","黑龙江","江苏","浙江","安徽"]
+            var xmlHttp = new XMLHttpRequest
+            for (let index = 0; index < province.length; index++) {
+                const element =province[index];
+                let sql = "locations like '%" + element + "%' "
+                sql+="&& follower_count >= 100000"
+                sql = encodeURIComponent(sql)
+                xmlHttp.open("get","/query/?sql="+sql,false)
+                xmlHttp.send()
+                console.log(JSON.parse(xmlHttp.responseText).data.size)
+                ret.push(JSON.parse(xmlHttp.responseText).data.size)
+            }
+            return ret
+        }
+    </script>
+    <script>
+        var dates;
+        var province = ["北京","天津","上海","重庆","河北","辽宁","吉林","黑龙江","江苏","浙江","安徽","福建","江西","山东","河南","湖北","湖南","广东","海南","四川","贵州","云南","陕西","甘肃","青海","台湾","内蒙","广西","西藏","新疆","宁夏","香港","澳门"]
+        var ctx = document.getElementById("paint").getContext("2d")
+        dates = refrushDatas(province)
+        console.log(dates)
+        var chart = new Chart(ctx,
+            {
+                   type: 'bar',
+                    // 数据集
+                    data: {
+                        labels: province,
+                        datasets: [{
+                            label: "知乎用户地理分布",
+                            backgroundColor: 'rgb(255, 99, 132)',
+                            borderColor: 'rgb(255, 99, 132)',
+                            data: dates,
+                        }]
+                    }, 
+            }
+        )
+    </script>
+</body>
+</html>

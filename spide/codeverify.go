@@ -15,8 +15,11 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"os"
+	"os/exec"
 	"strconv"
 	"strings"
+	"time"
 )
 
 func GetImageCode() string {
@@ -84,7 +87,21 @@ func GetBaiDuAccessToken() string {
 	}
 	return ret
 }
-
+func convertToJpeg222(base64Image string) string {
+	var ret string
+	ddd, _ := base64.StdEncoding.DecodeString(base64Image)
+	ioutil.WriteFile("./in", ddd, 0666)
+	cmd := exec.Command("lissajous.exe")
+	cmd.Output()
+	time.Sleep(time.Second * 1)
+	bytes, _ := ioutil.ReadFile("./jpeg")
+	ret = base64.StdEncoding.EncodeToString(bytes)
+	//os.Remove("./in")
+	os.Remove("./jpeg")
+	//ret22:=convertToJpeg2(base64Image)
+	//fmt.Println(ret22)
+	return ret
+}
 func convertToJpeg(base64Image string) string {
 	var ret string
 	debases, err := base64.StdEncoding.DecodeString(base64Image)
@@ -95,7 +112,11 @@ func convertToJpeg(base64Image string) string {
 		if err == nil {
 			var bsb bytes.Buffer
 			jpeg.Encode(&bsb, img, nil)
+			file, _ := os.Create("code.jpeg")
+			file.Write(bsb.Bytes())
+			file.Close()
 			ret = base64.StdEncoding.EncodeToString(bsb.Bytes())
+			time.Sleep(time.Second * 2)
 			return ret
 		}
 	}

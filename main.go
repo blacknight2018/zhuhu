@@ -17,6 +17,9 @@ func main() {
 	//status:=spide.CheckStatus()
 	//fmt.Println(status)
 	//spide.AddNewUser("zhi-li-gong-jue");
+	//fmt.Println(spide.GetRandomQuestion())
+	//fmt.Println(spide.GetSinglePage("https://www.zhihu.com/question/386668818"))
+	//return
 	go spide.FreshRandom()
 	//orm.SelectUserSizeByConditional("locations like '%北京%'")
 	//return
